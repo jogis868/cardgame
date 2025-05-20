@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Varlės kortelių akademija</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      font-family: Arial, sans-serif;
+    }
+    #threeContainer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    #messages {
+      padding: 10px;
+      background-color: rgba(255, 255, 255, 0.8);
+      border-radius: 5px;
+      color: red; /* Default color for messages */
+      font-size: 14px;
+    }
+    #joinRoomContainer {
+      background: rgba(255, 255, 255, 0.9);
+      padding: 15px;
+      border-radius: 8px;
+      width: 400px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+      position: relative;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 9999;
+    }
+
+    #joinRoomForm input, #joinRoomForm button {
+      padding: 8px;
+      font-size: 14px;
+      margin-top: 5px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .game-panel {
+      position: fixed;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.9);
+      padding: 15px;
+      border-radius: 8px;
+      width: 400px;
+      display: none; /* Hide by default */
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+      z-index: 9999;
+    }
+    .ui-play input, .ui-play button {
+      padding: 8px;
+      font-size: 14px;
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+  {% block content %}
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <!-- Three.js background container -->
+  <div id="threeContainer"></div>
+  <header style="position: relative; top: 0; left: 0; width: 100%; background: rgba(0, 0, 0, 0.7); color: white; z-index: 1000; padding: 10px; display: flex; align-items: center; justify-content: space-between;">
+    <h2 style="margin: 0;">Varlės kortelių akademija</h2>
+  
+    <div style="display: flex; gap: 12px; align-items: center;">
+      <!-- Pirmas: Mano progresas -->
+      <a href="{% url 'student_progress' %}" style="background: none; border: none; color: white; font-weight: bold; font-size: 16px; text-decoration: none; cursor: pointer;">
+        Mano progresas
+      </a>
+  
+      <!-- Antras: Atsijungti -->
+      <form action="{% url 'logout' %}" method="post" onsubmit="localStorage.removeItem('joinedRoomCode');">
+        {% csrf_token %}
+        <button type="submit" style="background: none; border: none; color: white; font-weight: bold; font-size: 16px; cursor: pointer;">
+          Atsijungti
+        </button>
+      </form>
+    </div>
+  </header>
+  
+    
+  <!-- Game Panel -->
+  <div class="game-panel" id="gamePanel">
+    <div class="stats">
+      Laikas: <span id="timeValue">60</span> &nbsp;|&nbsp;
+      Taškai: <span id="scoreValue">0</span>
+    </div>
+    <div id="guessTerm">Terminas: </div>
+    <input type="text" id="guessInput" placeholder="Įveskite spėjimą..." />
+    <button id="guessBtn">Spėti</button>
+    <button id="retryBtn">Bandyti dar kartą</button>
+    <div id="messages" style="text-align: center; margin-top: 10px; font-weight: bold;"></div>
+  </div>
+
+  <div id="joinRoomContainer">
+    <h3 style="margin-bottom: 10px;">Prisijungti prie kambario</h3>
+    <form id="joinRoomForm" method="post">
+      {% csrf_token %}
+      <input type="text" id="roomCodeInput" name="room_code" placeholder="Įveskite kambario kodą" required />
+      <button type="submit">Prisijungti</button>
+    </form>
+  </div>  
+  
+
+  <!-- Include Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
+  <script>
+    let scene, camera, renderer;
+    let cards3D = [];
+    let sceneReady = false;
+    let frogSprite;
+    let joinedRoomCode = localStorage.getItem('joinedRoomCode');
+    let timerHasStarted = false;
+    let timerInterval = null;
+
+
+    document.addEventListener("DOMContentLoaded", function () {
+      fetch('/student/get-user-role/')
+    .then(response => response.json())
+    .then(data => {
+      if (data.role !== 'student') {
+        window.location.href = '/teacher/rooms/';  // Redirect non-students
+      }
+    })
+    .catch(error => console.error('Error checking user role:', error));
+  initScene();  // Initialize the background once
+
+  const joinRoomForm = document.getElementById('joinRoomForm');
+  const gamePanel = document.getElementById('gamePanel');
+  document.getElementById('guessBtn').addEventListener('click', onGuessSubmit);
+  document.getElementById('retryBtn').addEventListener('click', onRetry);
+  const joinRoomContainer = document.getElementById('joinRoomContainer');
+
+  joinRoomContainer.style.display = 'block';
+  joinRoomContainer.style.visibility = 'visible';
+  joinRoomContainer.style.opacity = '1';
+  joinRoomContainer.style.position = 'relative';
+  joinRoomContainer.style.zIndex = '9999';
+
+  console.log('Join Room Container Display:', joinRoomContainer.style.display);
+
+  let joinedRoomCode = "{{ joined_room_code|default:'' }}";
+  if (joinedRoomCode) {
+    gamePanel.style.display = 'flex';
+    console.log(`Already joined room: ${joinedRoomCode}`);
+  } else {
+    joinRoomContainer.style.display = 'block';
+    console.log('Join Room form displayed');
+  }
+
+  if (joinRoomForm) {
+    joinRoomForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      joinedRoomCode = document.getElementById('roomCodeInput').value.trim();
+      console.log(`Joining room: ${joinedRoomCode}`);
+
+      fetch('/student/join-room/', {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': getCSRFToken(),
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({ room_code: joinedRoomCode }),
+      })
+        .then((response) => response.text())
+        .then(() => {
+          joinRoomContainer.style.display = 'none';
+          gamePanel.style.display = 'flex';
+          localStorage.setItem('joinedRoomCode', joinedRoomCode);
+          console.log('Room joined successfully.');
+
+          showMessage('Norėdami pradėti žaidimą, spauskite ant varlytės.', 'blue');
+
+          // Fetch room cards
+          fetch(`/get-room-cards/${joinedRoomCode}/`)
+            .then((response) => response.json())
+            .then((data) => {
+              if (data.cards) {
+                console.log('Fetched cards:', data.cards);
+                displayCardsIn3D(data.cards);
+              } else {
+                console.error('No cards found for this room');
+              }
+            })
+            .catch((error) => {
+              console.error('Error fetching cards:', error);
+              showMessage('An error occurred while fetching cards.', 'red');
+            });
+        })
+        .catch((error) => {
+          console.error('Error joining room:', error);
+          showMessage('An error occurred while joining the room.', 'red');
+        });
+    });
+  }
+});
+
+
+    function initScene() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x87CEEB);
+
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+      camera.position.set(0, 5, 15);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.getElementById("threeContainer").appendChild(renderer.domElement);
+
+      const light = new THREE.DirectionalLight(0xffffff, 1);
+      light.position.set(5, 10, 7);
+      scene.add(light);
+
+      createGround();
+      createFrogSprite();
+
+      console.log("Scene initialized");
+      sceneReady = true;
+      document.dispatchEvent(new Event('sceneInitialized'));
+
+      animate();
+      if (!sceneReady) {
+        animate();
+        sceneReady = true;
+      }
+
+      }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    }
+    function createGround() {
+    const groundGeo = new THREE.PlaneGeometry(250, 250);
+    const groundMat = new THREE.MeshPhongMaterial({ color: 0x228B22 });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI * 0.5;
+    ground.position.y = 0;
+    scene.add(ground);
+  }
+
+  function createFrogSprite() {
+    const frogTexture = new THREE.TextureLoader().load("https://cdn-icons-png.flaticon.com/512/7196/7196617.png");
+    const frogMat = new THREE.SpriteMaterial({ map: frogTexture });
+    frogSprite = new THREE.Sprite(frogMat);
+    frogSprite.scale.set(2, 2, 2);
+    frogSprite.position.set(0, 3, 4);
+    frogSprite.frustumCulled = false;
+    scene.add(frogSprite);
+  }
+
+    
+
+      //document.getElementById('joinRoomContainer').style.display = 'none';
+      //document.getElementById('gamePanel').style.display = 'flex';
+
+      //document.getElementById('guessBtn').addEventListener('click', onGuessSubmit);
+      //document.getElementById('retryBtn').addEventListener('click', onRetry);
+    //});
+  //}
+
+  // Check if cards are preloaded
+  const cardsDataElem = document.getElementById("cards-data");
+  if (cardsDataElem) {
+    const cardsData = JSON.parse(cardsDataElem.textContent);
+    console.log("Cards loaded:", cardsData);
+    displayCardsIn3D(cardsData);
+  }
+   // Check if the user is already in a room and adjust the UI
+   //if (window.location.pathname.includes("/room/")) {
+    //document.getElementById('joinRoomContainer').style.display = 'none';
+    //document.getElementById('gamePanel').style.display = 'flex';
+  //}
+//});
+
+
+    /* ========================== ANIMATION LOOP ========================== */
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Smooth flipping of cards
+      cards3D.forEach(card => {
+        if (card.targetRotation === undefined) {
+          card.targetRotation = 0;
+        }
+        const diff = card.targetRotation - card.mesh.rotation.y;
+        card.mesh.rotation.y += diff * 0.1;
+      });
+
+      renderer.render(scene, camera);
+    }
+
+
+    /* =========================== CSRF HELPER ============================ */
+    function getCSRFToken() {
+      return document.cookie
+        .split("; ")
+        .find(row => row.startsWith("csrftoken="))
+        ?.split("=")[1];
+    }
+
+    /* ====================== SHOW MESSAGES HELPER ======================= */
+    function showMessage(text, color="red") {
+      console.log(text);
+      const msgEl = document.getElementById("messages");
+        if (msgEl) {
+          msgEl.style.color = color;
+          msgEl.textContent = text;
+        }
+      }
+    /* ====================== STUDENT: JOIN ROOM ========================= */
+
+    function displayCardsIn3D(cards) {
+      console.log("Displaying 3D cards:", cards);
+    cards.forEach(card => create3DCard(card.front_text, card.back_text));
+  }
+
+
+
+
+    /* ========================= CREATE 3D CARD ========================== */
+    function create3DCard(term, desc) {
+      console.log(`Creating 3D card with term: ${term}, desc: ${desc}`);
+    const cardW = 3, cardH = 4.5, cardD = 0.4;
+    const index = cards3D.length;
+    const columns = 5;
+    const xSpacing = 5.0, zSpacing = 2.0;
+    const centerOffset = (columns - 1) / 2;
+    const col = index % columns;
+    const row = Math.floor(index / columns);
+    const xPos = (col - centerOffset) * xSpacing;
+    const zPos = 4 - row * zSpacing;
+    const yPos = 8;
+
+    console.log(`Creating 3D card: ${term} at position (${xPos}, ${yPos}, ${zPos})`);
+
+    const frontTex = makeTextTexture(term, 256, 256, '#007BFF', '#ffffff');
+    const backTex = makeTextTexture(desc, 256, 256, '#FF5733', '#ffffff');
+    const materials = [
+      new THREE.MeshBasicMaterial({ color: 0xaaaaaa }),
+      new THREE.MeshBasicMaterial({ color: 0xaaaaaa }),
+      new THREE.MeshBasicMaterial({ color: 0xaaaaaa }),
+      new THREE.MeshBasicMaterial({ color: 0xaaaaaa }),
+      new THREE.MeshBasicMaterial({ map: frontTex }),
+      new THREE.MeshBasicMaterial({ map: backTex })
+    ];
+
+    const geometry = new THREE.BoxGeometry(cardW, cardH, cardD);
+    const cardMesh = new THREE.Mesh(geometry, materials);
+    cardMesh.position.set(xPos, yPos, zPos);
+    scene.add(cardMesh);
+
+    cards3D.push({ mesh: cardMesh, frontText: term, backText: desc });
+  }
+
+  function makeTextTexture(txt, width, height, bg, color) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
+
+    const fontSize = 24;
+    ctx.font = `${fontSize}px Arial`;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    const lines = getWrappedLines(ctx, txt, width - 20);
+    let startY = (height - lines.length * (fontSize + 5)) / 2;
+    lines.forEach(line => {
+      ctx.fillText(line, width / 2, startY);
+      startY += fontSize + 5;
+    });
+
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  function getWrappedLines(ctx, text, maxWidth) {
+    const words = text.split(' ');
+    let line = '';
+    const lines = [];
+
+    words.forEach(word => {
+      const testLine = line + word + ' ';
+      if (ctx.measureText(testLine).width > maxWidth && line.length > 0) {
+        lines.push(line);
+        line = word + ' ';
+      } else {
+        line = testLine;
+      }
+    });
+
+    lines.push(line);
+    return lines;
+  }
+
+  function showMessage(text, color = "red") {
+    const msgEl = document.getElementById("messages");
+    if (msgEl) {
+      msgEl.style.color = color;
+      msgEl.textContent = text;
+    }
+  }
+
+    /* =========================== TIMER LOGIC =========================== */
+    function startTimer() {
+      timerHasStarted = true;
+      timeLeft = 60;
+      score = 0;
+      updateScore();
+      updateTimeDisplay();
+
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        updateTimeDisplay();
+        if (timeLeft <= 0) {
+          endGame();
+        }
+      }, 1000);
+    }
+
+    function updateScore() {
+      document.getElementById('scoreValue').textContent = score;
+    }
+    function updateTimeDisplay() {
+      document.getElementById('timeValue').textContent = timeLeft;
+    }
+
+    function endGame() {
+      clearInterval(timerInterval);
+      showMessage(`Laikas baigėsi! Galutinis rezultatas: ${score} taškai.`, "green");
+
+      if (joinedRoomCode) {
+        updateStudentScore(score);  // Send the score to the server
+      }
+      
+      // Display the final score to the student (example: an alert or custom modal)
+      //alert(`Žaidimas baigtas! Jūsų galutinis rezultatas: ${score} taškai.`);
+    }
+
+    /* =========================== RETRY GAME ============================ */
+    function onRetry() {
+      // Reset all card states
+      cards3D.forEach(c => {
+        c.guessed = false;
+        c.targetRotation = 0;
+        c.mesh.rotation.y = 0;
+      });
+      startTimer();
+      showMessage("Naujas bandymas! Spustelėkite varlę, kad gautumėte kortelę.", "green");
+    }
+
+    /* ===================== HANDLE FROG SPRITE CLICK =================== */
+    function onDocumentClick(e) {
+      // Ignore clicks on .game-panel
+      const panel = document.querySelector('.game-panel');
+      if (panel && panel.contains(e.target)) {
+        return;
+      }
+      e.preventDefault();
+
+      console.log("Frog sprite:", frogSprite);
+      if (!frogSprite) {
+        console.error("Frog sprite is not available.");
+        return;
+      }}
+
+      document.addEventListener("click", function (e) {
+      const mouse = new THREE.Vector2(
+        (e.clientX / window.innerWidth) * 2 - 1,
+        -(e.clientY / window.innerHeight) * 2 + 1
+      );
+
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, camera);
+
+      const intersects = raycaster.intersectObject(frogSprite);
+      if (intersects.length > 0) {
+        console.log("Frog clicked!");
+        onFrogClick();  // Trigger the game logic
+      } else {
+        console.log("Frog not clicked.");
+      }
+    });
+
+
+    function onFrogClick() {
+      console.log("Frog clicked! Checking if timer has started...");
+
+      if (!timerHasStarted) {
+        console.log("Timer has not started. Starting now...");
+        startTimer();
+        showMessage("Laikas pradėtas! Spustelėkite varlę bet kada, kad gautumėte kortelę.", "blue");
+      }
+
+      const unguessed = cards3D.filter(c => !c.guessed);
+      if (unguessed.length === 0) {
+        showMessage('Visos kortelės jau atspėtos!', "green");
+        return;
+      }
+
+      const idx = Math.floor(Math.random() * unguessed.length);
+      const chosenCard = unguessed[idx];
+      shootLineToCard(chosenCard);
+
+      currentCard = chosenCard;
+      document.getElementById('guessTerm').textContent = `Terminas: "${chosenCard.frontText}"`;
+      document.getElementById('guessInput').value = '';
+      showMessage('Įveskite spėjimą ir spauskite "Spėti".', "blue");
+    }
+
+
+    /* ======================= GUESS SUBMISSION ========================== */
+    function onGuessSubmit() {
+  if (!currentCard) {
+    showMessage('Nėra pasirinktos kortelės. Spustelėkite varlę!', "red");
+    return;
+  }
+  if (currentCard.guessed) {
+    showMessage('Ši kortelė jau atspėta.', "red");
+    return;
+  }
+
+  const guessInputEl = document.getElementById('guessInput');
+  const userGuess = guessInputEl.value.trim().toLowerCase();
+  if (!userGuess) {
+    showMessage('Įveskite spėjimą!', "red");
+    return;
+  }
+
+  const correctAnswer = currentCard.backText.toLowerCase();
+
+  if (userGuess === correctAnswer) {
+    score += 1; 
+
+    showMessage(`Teisingai! +1. Aprašymas: "${currentCard.backText}"`, "green"
+    );
+
+    // 🔥 FIX: Stop the card from flipping back
+    const newRotation = currentCard.mesh.rotation.y + Math.PI;
+    currentCard.targetRotation = newRotation; // Keep it at 180 degrees
+
+    gsap.to(currentCard.mesh.rotation, { 
+      y: newRotation, 
+      duration: 0.5, 
+      ease: "power2.out" 
+    });
+
+    gsap.to(currentCard.mesh.rotation, { 
+    y: currentCard.mesh.rotation.y + Math.PI, 
+    duration: 0.5, 
+    ease: "power2.out",
+    onComplete: () => createParticles(currentCard.mesh.position) // 🎆 Spawn particles after flip
+  });
+
+    currentCard.guessed = true; // Mark as guessed
+  } else {
+    showMessage(`Neteisingai! Teisingas aprašymas: "${currentCard.backText}"`, "red");
+
+    // If wrong, DO NOT flip back – let player guess again
+  }
+
+  currentCard = null;
+  document.getElementById('guessTerm').textContent = 'Terminas: ';
+  guessInputEl.value = '';
+  updateScore();
+}
+
+function moveCamera(targetPosition) {
+  gsap.to(camera.position, { 
+    x: targetPosition.x, 
+    y: targetPosition.y, 
+    z: targetPosition.z, 
+    duration: 1, 
+    ease: "power2.out" 
+  });
+}
+
+function createParticles(position) {
+  const particleGeometry = new THREE.BufferGeometry();
+  const particleMaterial = new THREE.PointsMaterial({
+    color: 0xffff00,
+    size: 1, // 🔥 Increase size from 0.2 to 1
+    transparent: true,
+    opacity: 1, // Ensure they are visible
+    depthWrite: false // Prevent depth conflict
+  });
+
+  const positions = new Float32Array(300 * 3); // 🔥 Increase particles count to 300
+  for (let i = 0; i < 300; i++) {
+    positions[i * 3] = position.x + (Math.random() - 0.5) * 3; // Bigger spread
+    positions[i * 3 + 1] = position.y + (Math.random() - 0.5) * 3;
+    positions[i * 3 + 2] = position.z + (Math.random() - 0.5) * 3;
+  }
+  
+  particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const particles = new THREE.Points(particleGeometry, particleMaterial);
+  
+  scene.add(particles);
+
+  // Animate particles fading out before removal
+  gsap.to(particleMaterial, { opacity: 0, duration: 1.5, onComplete: () => scene.remove(particles) });
+
+  // 🔥 Ensure the scene updates
+  requestAnimationFrame(animate);
+}
+
+    function floatAnimation(obj) {
+      gsap.to(obj.position, { y: "+=0.2", duration: 1, yoyo: true, repeat: -1, ease: "sine.inOut" });
+    }
+    floatAnimation(frogSprite);
+    cards3D.forEach(card => floatAnimation(card.mesh));
+
+
+    function submitScore(roomCode, score) {
+    console.log("Submitting score:", score, "for room:", roomCode);  // Debugging log
+
+    fetch('/student/update-score/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCSRFToken()  // Ensure CSRF token is included
+        },
+        body: JSON.stringify({
+            room_code: roomCode,
+            score: score
+        })
+    })
+    .then(response => response.json())
+    .then(data => console.log("Score Submission Response:", data))
+    .catch(error => console.error("Error submitting score:", error));
+}
+
+// Ensure this function is called at the end of the game
+submitScore("ABC123", 85);
+
+
+    /* ===================== SHOOT LINE TO SELECTED CARD ================= */
+    function shootLineToCard(card) {
+      const frogPos = frogSprite.position.clone();
+      const cardPos = card.mesh.position.clone();
+      const points  = [frogPos, cardPos];
+      const geo     = new THREE.BufferGeometry().setFromPoints(points);
+      const mat     = new THREE.LineBasicMaterial({ color: 0xff0000 });
+      const line    = new THREE.Line(geo, mat);
+      scene.add(line);
+
+      setTimeout(() => scene.remove(line), 1000);
+    }
+
+    /* ======================= UPDATE SCORE ON SERVER ==================== */
+    function updateStudentScore(finalScore) {
+    console.log("🚀 Submitting final score:", finalScore);
+
+    if (!joinedRoomCode) {
+        console.error("❌ No room code found! Score not submitted.");
+        return;
+    }
+
+    fetch('/student/update-score/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCSRFToken()  // Make sure CSRF token is included
+        },
+        body: JSON.stringify({
+            room_code: joinedRoomCode,
+            score: finalScore
+        })
+    })
+    .then(response => response.json())
+    .then(data => console.log("✅ Score Submission Response:", data))
+    .catch(error => console.error("❌ Error submitting score:", error));
+}
+  </script>
+  {% endblock %}
+</body>
+</html>

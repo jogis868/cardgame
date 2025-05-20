@@ -1,0 +1,7 @@
+{% extends "index.html" %}
+
+{% block content %}
+  <h2>Jūsų Rolė</h2>
+  <p>{{ role }}</p>
+  <a href="{% url 'index' %}">Atgal į pagrindinį puslapį</a>
+{% endblock %}

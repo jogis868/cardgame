@@ -1,0 +1,228 @@
+{% extends "index.html" %}
+
+{% block content %}
+
+<!-- Embed card data -->
+{{ cards|json_script:"cards-data" }}
+
+<!-- Three.js Setup -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
+<script>
+let scene, camera, renderer;
+let sceneReady = false;
+let cards3D = [];
+
+document.addEventListener("DOMContentLoaded", function() {
+  document.getElementById("joinRoomContainer").style.display = "none";
+  document.getElementById("uiPlay").style.display = "flex";
+    initScene();
+
+    var cardsDataElem = document.getElementById("cards-data");
+    if (cardsDataElem) {
+        var cardsData = JSON.parse(cardsDataElem.textContent);
+        console.log("Cards loaded in frontend:", cardsData);
+
+        if (sceneReady) {
+            displayCardsIn3D(cardsData);
+        } else {
+            console.error("Scene not ready. Cards will be displayed after initialization.");
+            document.addEventListener('sceneInitialized', function() {
+                displayCardsIn3D(cardsData);
+            });
+        }
+    }
+});
+
+function initScene() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB);
+
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 5, 15);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(5, 10, 7);
+    scene.add(light);
+
+    // Ground plane
+    const groundGeo = new THREE.PlaneGeometry(250, 250);
+    const groundMat = new THREE.MeshPhongMaterial({ color: 0x228B22 });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI * 0.5;
+    ground.position.y = 0;
+    scene.add(ground);
+
+    // Frog sprite
+    const frogTexture = new THREE.TextureLoader().load("https://cdn-icons-png.flaticon.com/512/7196/7196617.png");
+    const frogMat = new THREE.SpriteMaterial({ map: frogTexture });
+    frogSprite = new THREE.Sprite(frogMat);
+    frogSprite.scale.set(2, 2, 2);
+    frogSprite.position.set(0, 3, 4);
+    frogSprite.frustumCulled = false; // Ensure it's always detected by the raycaster
+    scene.add(frogSprite);
+
+
+    console.log("Scene initialized");
+    sceneReady = true;
+    document.dispatchEvent(new Event('sceneInitialized'));
+
+    animate();
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+}
+
+function displayCardsIn3D(cards) {
+    cards.forEach(card => {
+        create3DCard(card.front_text, card.back_text);
+    });
+}
+
+function create3DCard(term, desc) {
+    console.log(`Creating 3D card: ${term} - ${desc}`);
+    const cardW = 2, cardH = 3, cardD = 0.2;
+    const index = cards3D.length;
+    const columns = 5;
+    const col = index % columns;
+    const row = Math.floor(index / columns);
+
+    const xSpacing = 3.0, zSpacing = 2.0;
+    const centerOffset = (columns - 1) / 2;
+    const xPos = (col - centerOffset) * xSpacing;
+    const zPos = 4 - row * zSpacing;
+    const yPos = 6;
+
+    console.log(`Card position: (${xPos}, ${yPos}, ${zPos})`);
+
+    const frontTex = makeTextTexture(term, 256, 256, '#007BFF', '#ffffff');
+    const backTex = makeTextTexture(desc, 256, 256, '#FF5733', '#ffffff');
+    const materials = [
+        new THREE.MeshBasicMaterial({ color: 0xaaaaaa }),  
+        new THREE.MeshBasicMaterial({ color: 0xaaaaaa }),
+        new THREE.MeshBasicMaterial({ color: 0xaaaaaa }),
+        new THREE.MeshBasicMaterial({ color: 0xaaaaaa }),
+        new THREE.MeshBasicMaterial({ map: frontTex }),  
+        new THREE.MeshBasicMaterial({ map: backTex })    
+    ];
+
+    const geometry = new THREE.BoxGeometry(cardW, cardH, cardD);
+    const cardMesh = new THREE.Mesh(geometry, materials);
+    cardMesh.position.set(xPos, yPos, zPos);
+
+    scene.add(cardMesh);
+    cards3D.push({ mesh: cardMesh, frontText: term, backText: desc });
+}
+
+function makeTextTexture(txt, width, height, bg, color) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
+
+    const fontSize = 24;
+    ctx.font = `${fontSize}px Arial`;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    const margin = 10;
+    const availW = width - margin * 2;
+    const lines = getWrappedLines(ctx, txt, availW);
+    let startY = (height - lines.length * (fontSize + 5)) / 2;
+    const centerX = width / 2;
+
+    lines.forEach(line => {
+        ctx.fillText(line, centerX, startY);
+        startY += fontSize + 5;
+    });
+
+    return new THREE.CanvasTexture(canvas);
+}
+
+function getWrappedLines(ctx, text, maxWidth) {
+    const words = text.split(' ');
+    let line = '';
+    const lines = [];
+
+    words.forEach(word => {
+        const testLine = line + word + ' ';
+        if (ctx.measureText(testLine).width > maxWidth && line.length > 0) {
+            lines.push(line);
+            line = word + ' ';
+        } else {
+            line = testLine;
+        }
+    });
+
+    lines.push(line);
+    return lines;
+}
+function onDocumentClick(e) {
+      console.log("Document clicked");
+      // Ignore clicks on .game-panel
+      const panel = document.querySelector('.game-panel');
+      if (panel && panel.contains(e.target)) {
+        return;
+      }
+      e.preventDefault();
+
+      if (!frogSprite) return;
+
+      const mouse = new THREE.Vector2(
+        (e.clientX / window.innerWidth) * 2 - 1,
+        -(e.clientY / window.innerHeight) * 2 + 1
+      );
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, camera);
+
+      const intersects = raycaster.intersectObject(frogSprite);
+      if (intersects.length > 0) {
+        onFrogClick();
+      }
+    }
+
+    function onFrogClick() {
+      // Start the timer on the *first* frog click if not started already
+      if (!timerHasStarted) {
+        startTimer();
+        showMessage("Laikas pradėtas! Spustelėkite varlę bet kada, kad gautumėte kortelę.", "blue");
+      }
+
+      // Pick a random unguessed card
+      const unguessed = cards3D.filter(c => !c.guessed);
+      if (unguessed.length === 0) {
+        showMessage('Visos kortelės jau atspėtos!', "green");
+        return;
+      }
+
+      const idx = Math.floor(Math.random() * unguessed.length);
+      const chosenCard = unguessed[idx];
+      shootLineToCard(chosenCard);
+
+      currentCard = chosenCard;
+      document.getElementById('guessTerm').textContent = `Terminas: "${chosenCard.frontText}"`;
+      document.getElementById('guessInput').value = '';
+      showMessage('Įveskite spėjimą ir spauskite "Spėti".', "blue");
+    }
+    function shootLineToCard(card) {
+      const frogPos = frogSprite.position.clone();
+      const cardPos = card.mesh.position.clone();
+      const points  = [frogPos, cardPos];
+      const geo     = new THREE.BufferGeometry().setFromPoints(points);
+      const mat     = new THREE.LineBasicMaterial({ color: 0xff0000 });
+      const line    = new THREE.Line(geo, mat);
+      scene.add(line);
+
+      setTimeout(() => scene.remove(line), 1000);
+    }
+</script>
+{% endblock %}

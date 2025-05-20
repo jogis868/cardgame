@@ -1,0 +1,172 @@
+{% extends "base_teacher.html" %}
+
+{% block content %}
+  <h2>Kambarys: {{ room.code }}</h2>
+  
+  <div id="roomCardsScene"></div> <!-- Add the container for the Three.js scene -->
+
+  <!-- Embed card data for Three.js -->
+  {{ cards|json_script:"cards-data" }}
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
+  <script>
+    let roomScene, roomCamera, roomRenderer;
+    let cards3D = [];
+
+    document.addEventListener("DOMContentLoaded", function() {
+      initScene();
+      document.addEventListener("sceneReady", function() {
+      var cardsDataElem = document.getElementById("cards-data");
+      if (cardsDataElem) {
+          var cardsData = JSON.parse(cardsDataElem.textContent);
+          console.log("Cards loaded in frontend:", cardsData);
+          displayCardsIn3D(cardsData);
+    }
+      })
+    });
+
+    function initScene() {
+      roomScene = new THREE.Scene();
+      roomScene.background = new THREE.Color(0x87CEEB);
+
+      roomCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+      roomCamera.position.set(0, 15, 30);
+
+      roomRenderer = new THREE.WebGLRenderer({ antialias: true });
+      roomRenderer.setSize(window.innerWidth, window.innerHeight);
+      document.getElementById("roomCardsScene").appendChild(roomRenderer.domElement);
+
+      const light = new THREE.DirectionalLight(0xffffff, 1);
+      light.position.set(5, 10, 7);
+      roomScene.add(light);
+
+      const groundGeo = new THREE.PlaneGeometry(100, 100);
+      const groundMat = new THREE.MeshPhongMaterial({ color: 0x228B22 });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.x = -Math.PI * 0.5;
+      ground.position.y = -1;
+      roomScene.add(ground);
+      console.log("roomScene:", roomScene);
+      if (!roomScene) {
+        console.error("roomScene is not initialized!");
+        return;
+      }
+      if (roomScene) {
+        console.log("Adding card to scene:", term);
+        roomScene.add(cardMesh);
+      } else {
+        console.error("roomScene is not initialized!");
+      }
+
+
+      animate();
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      roomRenderer.render(roomScene, roomCamera);
+    }
+
+    function displayCardsIn3D(cards) {
+      console.log("Displaying cards:", cards);
+      cards.forEach(card => {
+          create3DCard(card.front_text, card.back_text);
+      });
+    }
+
+    function create3DCard(term, desc) {
+      console.log(`Creating 3D card: ${term} - ${desc}`);
+      const cardW = 2, cardH = 3, cardD = 0.2;
+      const index = cards3D.length;
+      const columns = 5;
+      const col = index % columns;
+      const row = Math.floor(index / columns);
+
+      const xSpacing = 3.0, zSpacing = 2.0;
+      const centerOffset = (columns - 1) / 2;
+      const xPos = (col - centerOffset) * xSpacing;
+      const zPos = 4 - row * zSpacing;
+      const yPos = 1;
+
+      const frontTex = makeTextTexture(term, 256, 256, '#007BFF', '#ffffff');
+      const backTex = makeTextTexture(desc, 256, 256, '#FF5733', '#ffffff');
+      const materials = [
+          new THREE.MeshBasicMaterial({ color: 0xaaaaaa }),
+          new THREE.MeshBasicMaterial({ color: 0xaaaaaa }),
+          new THREE.MeshBasicMaterial({ color: 0xaaaaaa }),
+          new THREE.MeshBasicMaterial({ color: 0xaaaaaa }),
+          new THREE.MeshBasicMaterial({ map: frontTex }),
+          new THREE.MeshBasicMaterial({ map: backTex })
+      ];
+
+      const geometry = new THREE.BoxGeometry(cardW, cardH, cardD);
+      const cardMesh = new THREE.Mesh(geometry, materials);
+      cardMesh.position.set(xPos, yPos, zPos);
+
+      roomScene.add(cardMesh);
+      cards3D.push({ mesh: cardMesh, frontText: term, backText: desc });
+    }
+
+    function makeTextTexture(txt, width, height, bg, color) {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, width, height);
+
+      const fontSize = 24;
+      ctx.font = `${fontSize}px Arial`;
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+
+      const margin = 10;
+      const availW = width - margin * 2;
+      const lines = getWrappedLines(ctx, txt, availW);
+      let startY = (height - lines.length * (fontSize + 5)) / 2;
+      const centerX = width / 2;
+
+      lines.forEach(line => {
+          ctx.fillText(line, centerX, startY);
+          startY += fontSize + 5;
+      });
+
+      return new THREE.CanvasTexture(canvas);
+    }
+    function getWrappedLines(ctx, text, maxWidth) {
+  const words = text.split(' ');
+  let line = '';
+  const lines = [];
+
+  words.forEach(word => {
+    const testLine = line + word + ' ';
+    if (ctx.measureText(testLine).width > maxWidth && line.length > 0) {
+      lines.push(line);
+      line = word + ' ';
+    } else {
+      line = testLine;
+    }
+  });
+
+  lines.push(line);
+  return lines;
+}
+  </script>
+  {% if user.role == "teacher" %}
+    <h3>Pridėti naują kortelę</h3>
+    <form action="{% url 'room_cards' room.code %}" method="post">
+      {% csrf_token %}
+      <label for="front_text">Terminas:</label>
+      <input type="text" name="front_text" id="front_text" required>
+      <br>
+      <label for="back_text">Aprašymas:</label>
+      <input type="text" name="back_text" id="back_text" required>
+      <br>
+      <button type="submit">Pridėti kortelę</button>
+    </form>
+  {% endif %}
+
+  <a href="{% url 'index' %}">Grįžti į pagrindinį puslapį</a>
+{% endblock %}

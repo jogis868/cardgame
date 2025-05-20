@@ -1,0 +1,306 @@
+{% extends 'base_teacher.html' %}
+{% block content %}
+<div class="teacher-dashboard" style="max-height: 80vh; overflow-y: auto; padding: 20px;">
+  <button onclick="location.href='{% url 'teacher_profile' %}'">Grįžti</button>
+
+  <h2>Kambarys: {{ room.code }}</h2>
+  {% if room.name %}
+    <p>Pavadinimas: {{ room.name }}</p>
+  {% else %}
+    <p>Pavadinimas: <em>(nenurodytas)</em></p>
+  {% endif %}
+
+  <h3>Atnaujinti kambario pavadinimą</h3>
+    <form action="{% url 'update_room_name' room.id %}" method="post">
+    {% csrf_token %}
+    <label for="new_name">Naujas kambario pavadinimas:</label>
+    <input type="text" id="new_name" name="name" value="{{ room.name }}" required><br>
+    <button type="submit">Atnaujinti pavadinimą</button>
+    </form>
+
+    <div id="confirmDeletePopup" style="display: none; position: fixed; top: 30%; left: 50%; transform: translate(-50%, -30%); background: white; padding: 20px; border: 2px solid black; border-radius: 8px; z-index: 10000; text-align: center;">
+        <p>Ar tikrai norite ištrinti šią kortelę?</p>
+        <button onclick="confirmDelete(true)" style="margin-right: 10px;">Taip</button>
+        <button onclick="confirmDelete(false)">Ne</button>
+      </div>
+      
+
+<div class="dashboard-flex-container">
+    <!-- Left Column: New Card Creation -->
+    <div class="dashboard-column">
+        <!-- New Card Creation Form -->
+        <h3>Pridėti naują kortelę</h3>
+        <form action="{% url 'room_cards' room.code %}" method="post">
+            {% csrf_token %}
+            <label for="front_text">Terminas:</label>
+            <input type="text" id="front_text" name="front_text" required><br>
+            <label for="back_text">Aprašymas:</label>
+            <input type="text" id="back_text" name="back_text" required><br>
+            <button type="submit">Pridėti kortelę</button>
+        </form>
+        </div>
+    <div class="dashboard-column">
+
+        <h3>Kortelės</h3>
+        <table border="1" cellpadding="10">
+            <tr>
+            <th>Terminas</th>
+            <th>Aprašymas</th>
+            <th>Panaikinti</th>
+            </tr>
+            {% for card in cards %}
+            <tr id="card-{{ card.id }}">
+                <td>{{ card.front_text }}</td>
+                <td>{{ card.back_text }}</td>
+                <td>
+                <button onclick="deleteCard({{ card.id }})">❌</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        <hr>
+        <h3>Generuoti korteles pagal temą (DI)</h3>
+        <form action="{% url 'generate_ai_cards' room.id %}" method="post">
+            {% csrf_token %}
+            <label for="theme">Tema:</label>
+            <input type="text" id="theme" name="theme" required placeholder="Pvz.: Saulės sistema">
+            <button type="submit">Generuoti korteles</button>
+        </form>
+        
+<!-- Embed card data -->
+{{ cards|json_script:"cards-data" }}
+
+<!-- Three.js Setup -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
+<script>
+let roomScene, roomCamera, roomRenderer;
+let sceneReady = false;  // Ensure scene is ready before rendering cards
+let cards3D = [];        // Store 3D card objects
+
+document.addEventListener("DOMContentLoaded", function() {
+    initScene();
+    
+    var cardsDataElem = document.getElementById("cards-data");
+    if (cardsDataElem) {
+        var cardsData = JSON.parse(cardsDataElem.textContent);
+        console.log("Cards loaded in frontend:", cardsData);
+
+        if (sceneReady) {
+            displayCardsIn3D(cardsData);
+        } else {
+            document.addEventListener('sceneInitialized', function() {
+            console.log("sceneInitialized event received");
+            var cardsDataElem = document.getElementById("cards-data");
+            if (cardsDataElem) {
+                var cardsData = JSON.parse(cardsDataElem.textContent);
+                console.log("Scene is ready. Now displaying cards.");
+                displayCardsIn3D(cardsData);
+    }
+});
+
+        }
+    }
+});
+
+function initScene() {
+    roomScene = new THREE.Scene();
+    roomScene.background = new THREE.Color(0x87CEEB);
+
+    roomCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+    roomCamera.position.set(0, 8, 20);
+
+    roomRenderer = new THREE.WebGLRenderer({ antialias: true });
+    roomRenderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(roomRenderer.domElement);
+
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(5, 10, 7);
+    roomScene.add(light);
+
+    // Ground plane (grass)
+    const groundGeo = new THREE.PlaneGeometry(100, 100);
+    const groundMat = new THREE.MeshPhongMaterial({ color: 0x228B22 });  // Green grass color
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI * 0.5;
+    ground.position.y = -1;
+    roomScene.add(ground);
+
+    console.log("Scene initialized");
+    sceneReady = true;
+    document.dispatchEvent(new Event('sceneInitialized'));
+
+    // Frog sprite
+    //const frogTexture = new THREE.TextureLoader().load("https://cdn-icons-png.flaticon.com/512/7196/7196617.png");
+    //const frogMat = new THREE.SpriteMaterial({ map: frogTexture });
+    //const frogSprite = new THREE.Sprite(frogMat);
+    //frogSprite.scale.set(0.5, 0.5, 0.5);
+    //frogSprite.position.set(0, 1.5, 4);
+    //sroomScene.add(frogSprite);
+
+    animate();
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    roomRenderer.render(roomScene, roomCamera);
+}
+
+let pendingDeleteCardId = null;
+function deleteCard(cardId) {
+    pendingDeleteCardId = cardId;
+    document.getElementById('confirmDeletePopup').style.display = 'block';
+}
+
+function confirmDelete(confirmed) {
+    const popup = document.getElementById('confirmDeletePopup');
+    popup.style.display = 'none';
+
+    if (confirmed && pendingDeleteCardId !== null) {
+        fetch(`/teacher/rooms/delete-card/${pendingDeleteCardId}/`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({})
+        })
+        .then(response => {
+            if (response.ok) {
+                document.getElementById(`card-${pendingDeleteCardId}`).remove();
+                showMessage('✅ Kortelė sėkmingai ištrinta!', 'green');
+                reloadCardsTable();  // <-- Šitas papildymas!
+            } else {
+                showMessage('❌ Klaida šalinant kortelę.', 'red');
+            }
+        });
+    }
+    pendingDeleteCardId = null;
+}
+function reloadCardsTable() {
+    fetch(`/get-room-cards/{{ room.code }}/`)
+    .then(response => response.json())
+    .then(data => {
+        const cards = data.cards;
+
+        // 1. Išvalyti HTML lentelę
+        const tableBody = document.querySelector('table tbody');
+        tableBody.innerHTML = '';
+
+        cards.forEach(card => {
+            const row = document.createElement('tr');
+            row.id = `card-${card.id}`;
+            row.innerHTML = `
+                <td>${card.front_text}</td>
+                <td>${card.back_text}</td>
+                <td><button onclick="deleteCard(${card.id})">❌</button></td>
+            `;
+            tableBody.appendChild(row);
+        });
+
+        // 2. Išvalyti 3D korteles
+        cards3D.forEach(card => {
+            roomScene.remove(card.mesh);
+        });
+        cards3D = []; // išvalyti masyvą
+
+        // 3. Atkurti naujas 3D korteles
+        displayCardsIn3D(cards);
+    })
+    .catch(error => {
+        console.error('Klaida kraunant korteles:', error);
+    });
+}
+
+function displayCardsIn3D(cards) {
+    console.log("Displaying cards:", cards);
+    cards.forEach(card => {
+        console.log(`Creating card: ${card.front_text} - ${card.back_text}`);
+        create3DCard(card.front_text, card.back_text);
+    });
+}
+
+function create3DCard(term, desc) {
+    console.log(`Creating 3D card: ${term} - ${desc}`);
+    const cardW = 2, cardH = 3, cardD = 0.2;
+    const index = cards3D.length;
+    const columns = 5;
+    const col = index % columns;
+    const row = Math.floor(index / columns);
+
+    const xSpacing = 3.0, zSpacing = 2.0;
+    const centerOffset = (columns - 1) / 2;
+    const xPos = (col - centerOffset) * xSpacing;
+    const zPos = 4 - row * zSpacing;
+    const yPos = 1;
+
+    console.log(`Card position: (${xPos}, ${yPos}, ${zPos})`);
+
+    const frontTex = makeTextTexture(term, 256, 256, '#007BFF', '#ffffff');
+    const backTex = makeTextTexture(desc, 256, 256, '#FF5733', '#ffffff');
+    const materials = [
+        new THREE.MeshBasicMaterial({ color: 0xaaaaaa }),  // side
+        new THREE.MeshBasicMaterial({ color: 0xaaaaaa }),
+        new THREE.MeshBasicMaterial({ color: 0xaaaaaa }),
+        new THREE.MeshBasicMaterial({ color: 0xaaaaaa }),
+        new THREE.MeshBasicMaterial({ map: frontTex }),    // front
+        new THREE.MeshBasicMaterial({ map: backTex })      // back
+    ];
+
+    const geometry = new THREE.BoxGeometry(cardW, cardH, cardD);
+    const cardMesh = new THREE.Mesh(geometry, materials);
+    cardMesh.position.set(xPos, yPos, zPos);
+
+    roomScene.add(cardMesh);
+    console.log(`Card added to scene: ${term}`);
+    cards3D.push({ mesh: cardMesh, frontText: term, backText: desc });
+}
+
+function makeTextTexture(txt, width, height, bg, color) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
+
+    const fontSize = 24;
+    ctx.font = `${fontSize}px Arial`;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    const margin = 10;
+    const availW = width - margin * 2;
+    const lines = getWrappedLines(ctx, txt, availW);
+    let startY = (height - lines.length * (fontSize + 5)) / 2;
+    const centerX = width / 2;
+
+    lines.forEach(line => {
+        ctx.fillText(line, centerX, startY);
+        startY += fontSize + 5;
+    });
+
+    return new THREE.CanvasTexture(canvas);
+}
+
+function getWrappedLines(ctx, text, maxWidth) {
+    const words = text.split(' ');
+    let line = '';
+    const lines = [];
+
+    words.forEach(word => {
+        const testLine = line + word + ' ';
+        if (ctx.measureText(testLine).width > maxWidth && line.length > 0) {
+            lines.push(line);
+            line = word + ' ';
+        } else {
+            line = testLine;
+        }
+    });
+
+    lines.push(line);
+    return lines;
+}
+</script>
+{% endblock %}

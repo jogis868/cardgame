@@ -1,0 +1,27 @@
+{% extends "base_teacher.html" %}
+
+{% block content %}
+<h2>Mokinių geriausi rezultatai</h2>
+<table border="1">
+  <tr>
+    <th>Mokinys</th>
+    <th>Kambarys</th>
+    <th>Kambario kodas</th>
+    <th>Geriausias rezultatas</th>
+  </tr>
+  {% for result in results %}
+  <tr>
+    <td>{{ result.student__username }}</td>
+    <td>{{ result.room__name|default:"(Be pavadinimo)" }}</td>
+    <td>{{ result.room__code }}</td>
+    <td>{{ result.best_score }}</td>
+  </tr>
+  {% empty %}
+  <tr>
+    <td colspan="4">Nėra rezultatų.</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<a href="{% url 'teacher_profile' %}">Atgal</a>
+{% endblock %}

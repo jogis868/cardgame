@@ -1,0 +1,72 @@
+{% extends 'base_teacher.html' %}
+{% load static %}
+
+{% block content %}
+<div class="header bg-primary pb-6">
+  <div class="container-fluid">
+    <div class="header-body">
+      <div class="row align-items-center py-4">
+        <div class="col-lg-6 col-7">
+            </ol>
+          </nav>
+        </div>
+        <div class="col-lg-6 col-5 text-right">
+          <!-- Example: "Create Room" or some other action -->
+          <button class="btn btn-sm btn-neutral" onclick="createRoom()">Sukurti kambarį</button>
+        </div>
+      </div>
+      <!-- Insert "card stats" or anything else here -->
+    </div>
+  </div>
+</div>
+
+<div class="container-fluid mt--6">
+  <div class="row">
+    <div class="col-xl-12">
+      <div class="card bg-default">
+        <div class="card-header bg-transparent">
+          <h2 class="text-light">{{ request.user.username }}: mano kambariai</h2>
+        </div>
+        <div class="card-body text-white">
+          <ul>
+            {% for room in rooms %}
+              <li>
+                <!-- Link to detail page -->
+                <a class="text-info" href="{% url 'teacher_room_detail' room.id %}">
+                  Kambarys: {{ room.code }} - {{ room.name|default:"(be pavadinimo)" }}
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    window.createRoom = function() {
+      console.log("Creating room...");
+      fetch('/teacher/create-room/', {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': '{{ csrf_token }}'
+        }
+      })
+      .then(response => {
+        if (response.redirected) {
+          window.location.href = response.url;
+        } else {
+          return response.text().then(text => {
+            alert(text);
+          });
+        }
+      })
+      .catch(error => {
+        console.error('Error creating room:', error);
+        alert('Įvyko klaida kuriant kambarį.');
+      });
+    };
+  });
+</script>

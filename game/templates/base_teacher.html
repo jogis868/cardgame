@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  {% load static %}
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow-y: scroll;
+      font-family: Arial, sans-serif;
+    }
+    #threeContainer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      pointer-events: none;
+    }
+    .dashboard-content {
+      position: relative;
+      z-index: 9999;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+      margin: 20px;
+      max-height: 80vh;  
+      overflow-y: auto;
+    }
+    .dashboard-flex-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 20px;
+    }
+
+    .dashboard-column {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      overflow-y: auto;
+      max-height: 70vh;
+    }
+
+    .dashboard-column form {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .dashboard-column form label {
+      margin-top: 10px;
+    }
+
+    .dashboard-column form input {
+      padding: 8px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+  </style>
+</head>
+<body>
+  <!-- Three.js Background Container -->
+  <div id="threeContainer"></div>
+
+  <header class="dashboard-content">
+    <h1>Sveiki, {{ request.user.username }}</h1>
+    <nav>
+      <a href="{% url 'teacher_profile' %}">Mano kambariai</a> |
+      <a href="{% url 'student_results' %}">Moksleivių rezultatai</a> |
+      <a href="{% url 'login' %}">Atsijungti</a>
+    </nav>
+  </header>
+
+  <main class="dashboard-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Include Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
+  <script>
+    let scene, camera, renderer, frogSprite;
+
+    function initScene() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x87CEEB);
+
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+      camera.position.set(0, 5, 10);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.getElementById("threeContainer").appendChild(renderer.domElement);
+
+      const light = new THREE.DirectionalLight(0xffffff, 1);
+      light.position.set(5, 10, 7);
+      scene.add(light);
+
+      // Ground plane
+      const groundGeo = new THREE.PlaneGeometry(100, 100);
+      const groundMat = new THREE.MeshPhongMaterial({ color: 0x228B22 });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.x = -Math.PI * 0.5;
+      ground.position.y = -1;
+      scene.add(ground);
+
+      // Frog sprite
+      const frogTexture = new THREE.TextureLoader().load("https://cdn-icons-png.flaticon.com/512/7196/7196617.png");
+      const frogMat = new THREE.SpriteMaterial({ map: frogTexture });
+      frogSprite = new THREE.Sprite(frogMat);
+      frogSprite.scale.set(0.5, 0.5, 0.5);
+      frogSprite.position.set(0, 1.5, 4);
+      scene.add(frogSprite);
+
+      animate();
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+      initScene();
+    });
+
+  function createRoom() {
+      console.log("Creating room...");
+      
+      fetch('/teacher/create-room/', {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': '{{ csrf_token }}'
+        }
+      })
+      .then(response => {
+        if (response.redirected) {
+          window.location.href = response.url; // Redirect to the new room detail page
+        } else {
+          return response.text().then(text => {
+            alert(text); // Show an alert with the server response
+          });
+        }
+      })
+      .catch(error => {
+        console.error('Error creating room:', error);
+        alert('Įvyko klaida kuriant kambarį.');
+      });
+    }
+  </script>
+</body>
+</html>

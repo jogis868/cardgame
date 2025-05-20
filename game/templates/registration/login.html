@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prisijungimas</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    #threeContainer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    .game-panel {
+      position: fixed;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.9);
+      padding: 15px;
+      border-radius: 8px;
+      width: 400px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+      z-index: 9999;
+    }
+    .game-panel label {
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    .game-panel input {
+      margin-bottom: 10px;
+      padding: 6px;
+    }
+    #messages {
+      font-weight: bold;
+      text-align: center;
+      color: red;
+    }
+  </style>
+</head>
+<body>
+
+<!-- 3D Background Container -->
+<div id="threeContainer"></div>
+
+<!-- Login Panel -->
+<div class="game-panel">
+  <h3>Prisijungimas</h3>
+
+  <form method="post" action="{% url 'login' %}?next={% url 'role_redirect' %}">
+    {% csrf_token %}
+    <div>
+      <label for="id_username">Vartotojo vardas:</label>
+      <input type="text" name="username" id="id_username" required placeholder="Vartotojo vardas">
+    </div>
+  
+    <div>
+      <label for="id_password">Slaptažodis:</label>
+      <input type="password" name="password" id="id_password" required placeholder="Slaptažodis">
+    </div>
+  
+    <button type="submit">Prisijungti</button>
+  </form>
+
+  <div style="text-align: center; margin-top: 10px;">
+    <a href="{% url 'register' %}">Neturi paskyros? Registruotis</a>
+  </div>
+  
+  
+</div>
+
+<!-- Include Three.js -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
+<script>
+let scene, camera, renderer;
+
+/** Initialize a simple Three.js scene for the background */
+function initScene() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB);
+
+    camera = new THREE.PerspectiveCamera(
+      75,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      100
+    );
+    camera.position.set(0, 2, 8);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.getElementById("threeContainer").appendChild(renderer.domElement);
+
+    // Add a directional light
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(5, 10, 7);
+    scene.add(light);
+
+    // Ground
+    const groundGeo = new THREE.PlaneGeometry(100, 100);
+    const groundMat = new THREE.MeshPhongMaterial({ color: 0x228B22 });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI * 0.5;
+    ground.position.y = 0;
+    scene.add(ground);
+
+    // A fun sprite
+    const frogTexture = new THREE.TextureLoader().load("https://cdn-icons-png.flaticon.com/512/7196/7196617.png");
+    const frogMat = new THREE.SpriteMaterial({ map: frogTexture });
+    const frogSprite = new THREE.Sprite(frogMat);
+    frogSprite.scale.set(0.5, 0.5, 0.5);
+    frogSprite.position.set(0, 1.5, 4);
+    scene.add(frogSprite);
+
+    animate();
+}
+
+/** Render loop */
+function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    initScene();
+});
+</script>
+
+</body>
+</html>

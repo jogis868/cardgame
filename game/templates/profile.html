@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profilis</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    #threeContainer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    .game-panel {
+      position: fixed;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.9);
+      padding: 15px;
+      border-radius: 8px;
+      width: 400px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+      z-index: 9999;
+    }
+    #messages {
+      font-weight: bold;
+      text-align: center;
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <!-- Three.js background container -->
+  <div id="threeContainer"></div>
+
+  <!-- Profile Panel -->
+  <div class="game-panel">
+    <h2>Profilis: {{ user.username }}</h2>
+    
+    <!-- User Details -->
+    <p>Vardas: {{ user.first_name }} {{ user.last_name }}</p>
+    <p>Vaidmuo: {{ user.role }}</p>
+    
+    <!-- Auth Controls -->
+    {% if user.is_authenticated %}
+    <form action="{% url 'logout' %}" method="post" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit">Atsijungti</button>
+    </form>
+    {% else %}
+    <a href="{% url 'login' %}">Prisijungti</a>
+    {% endif %}
+
+    <!-- Teacher UI: only visible if the user is authenticated AND role == 'teacher' -->
+    {% if user.is_authenticated and user.role == 'teacher' %}
+      <div id="teacherUI">
+        <h3>Mokytojo valdymas</h3>
+        <button onclick="createRoom()">Sukurti kambarį</button>
+        <p>Kambario kodas: <span id="roomCode">-</span></p>
+        <input type="text" id="frontText" placeholder="Terminas" />
+        <input type="text" id="backText" placeholder="Apibrėžtis" />
+        <button onclick="addCard()">Pridėti kortelę</button>
+      </div>
+    {% endif %}
+    
+    <div id="messages"></div>
+  </div>
+
+  <!-- Include Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
+  <script>
+    let scene, camera, renderer;
+    let frogSprite;
+    const cards3D = [];
+
+    function initScene() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x87CEEB);
+
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+      camera.position.set(0, 2, 8);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.getElementById("threeContainer").appendChild(renderer.domElement);
+
+      const light = new THREE.DirectionalLight(0xffffff, 1);
+      light.position.set(5, 10, 7);
+      scene.add(light);
+
+      const groundGeo = new THREE.PlaneGeometry(100, 100);
+      const groundMat = new THREE.MeshPhongMaterial({ color: 0x228B22 });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.x = -Math.PI * 0.5;
+      ground.position.y = 0;
+      scene.add(ground);
+
+      const frogTexture = new THREE.TextureLoader().load("https://cdn-icons-png.flaticon.com/512/7196/7196617.png");
+      const frogMat = new THREE.SpriteMaterial({ map: frogTexture });
+      frogSprite = new THREE.Sprite(frogMat);
+      frogSprite.scale.set(0.5, 0.5, 0.5);
+      frogSprite.position.set(0, 1.5, 4);
+      scene.add(frogSprite);
+
+      animate();
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+      initScene();
+    });
+  </script>
+</body>
+</html>

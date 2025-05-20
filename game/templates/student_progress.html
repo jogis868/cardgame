@@ -1,0 +1,60 @@
+{% extends "index.html" %}
+
+{% block content %}
+<!-- Naujas Header -->
+<header style="position: relative; top: 0; left: 0; width: 100%; background: rgba(0, 0, 0, 0.7); color: white; z-index: 1000; padding: 10px; display: flex; align-items: center; justify-content: space-between;">
+  <h2 style="margin: 0;">Varlės kortelių akademija</h2>
+
+  <div style="display: flex; gap: 12px; align-items: center;">
+    <!-- White House Icon -->
+    <a href="/" style="background: none; border: none; color: white; font-weight: bold; font-size: 22px; text-decoration: none; cursor: pointer;">
+        🏠
+      </a>      
+
+    <!-- Atsijungti -->
+    <form action="{% url 'logout' %}" method="post" onsubmit="localStorage.removeItem('joinedRoomCode');">
+      {% csrf_token %}
+      <button type="submit" style="background: none; border: none; color: white; font-weight: bold; font-size: 16px; cursor: pointer;">
+        Atsijungti
+      </button>
+    </form>
+  </div>
+</header>
+
+<!-- Likusi turinio dalis -->
+<div style="padding: 20px; margin-top: 60px;">
+  <h3>🃏 Žaidimų kambariai</h3>
+  <table border="1" style="margin-bottom: 30px; width: 100%; text-align: center;">
+      <tr>
+          <th>Kambario kodas</th>
+          <th>Kambario pavadinimas</th>
+          <th>Žaista kartų</th>
+          <th>Geriausias rezultatas</th>
+      </tr>
+      {% for result in my_results %}
+      <tr>
+          <td>{{ result.room__code }}</td>
+          <td>{{ result.room__name|default:"(Be pavadinimo)" }}</td>
+          <td>{{ result.times_played }}</td>
+          <td>{{ result.best_score }}</td>
+      </tr>
+      {% endfor %}
+  </table>
+
+  <h3>🏆 Reitingas</h3>
+  <table border="1" style="width: 100%; text-align: center;">
+      <tr>
+          <th>Vieta</th>
+          <th>Žaidėjas</th>
+          <th>Aukščiausias taškų rezultatas</th>
+      </tr>
+      {% for player in leaderboard %}
+      <tr {% if player.student__username == user.username %} style="background-color: #e0ffe0;" {% endif %}>
+          <td>{{ player.position }}</td>
+          <td>{{ player.student__username }}</td>
+          <td>{{ player.total_score }}</td>
+      </tr>
+      {% endfor %}
+  </table>
+</div>
+{% endblock %}
