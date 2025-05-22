@@ -2,18 +2,20 @@
 import os
 import sys
 import subprocess
+import urllib.request
 
 VENV_DIR = "venv"
 PYTHON = sys.executable
 
+# Helper to run subprocess commands
 def run(cmd, **kw):
     print(f"> {' '.join(cmd)}")
     subprocess.check_call(cmd, **kw)
 
 # 1) create venv if it doesn't exist
 if not os.path.isdir(VENV_DIR):
-    # On Windows, bypass ensurepip errors by skipping pip bootstrap
     if os.name == "nt":
+        # On Windows, skip pip bootstrapping to avoid ensurepip errors
         run([PYTHON, "-m", "venv", VENV_DIR, "--without-pip"])
     else:
         run([PYTHON, "-m", "venv", VENV_DIR])
@@ -22,10 +24,15 @@ if not os.path.isdir(VENV_DIR):
 if os.name == "nt":
     pip_path = os.path.join(VENV_DIR, "Scripts", "pip.exe")
     python_path = os.path.join(VENV_DIR, "Scripts", "python.exe")
-    # If pip is missing, install it manually
+    # If pip is missing, download and install get-pip.py
     if not os.path.isfile(pip_path):
-        # Make sure get-pip.py is in the same directory
-        run([python_path, "get-pip.py"])
+        get_pip = "get-pip.py"
+        if not os.path.isfile(get_pip):
+            print("Downloading get-pip.py...")
+            urllib.request.urlretrieve(
+                "https://bootstrap.pypa.io/get-pip.py", get_pip
+            )
+        run([python_path, get_pip])
 else:
     pip_path = os.path.join(VENV_DIR, "bin", "pip")
     python_path = os.path.join(VENV_DIR, "bin", "python")
