@@ -14,6 +14,13 @@ def run(cmd, **kw):
 if not os.path.isdir(VENV_DIR):
     run([PYTHON, "-m", "venv", VENV_DIR])
 
+if os.name == "nt":
+    pip_path = os.path.join(VENV_DIR, "Scripts", "pip.exe")
+    python_path = os.path.join(VENV_DIR, "Scripts", "python.exe")
+    # If pip is missing, install it manually
+    if not os.path.isfile(pip_path):
+        run([python_path, "get-pip.py"])
+
 # 2) install/update pip and project requirements
 if os.name == "nt":
     PIP = os.path.join(VENV_DIR, "Scripts", "pip.exe")
@@ -21,10 +28,9 @@ if os.name == "nt":
 else:
     PIP = os.path.join(VENV_DIR, "bin", "pip")
     PY = os.path.join(VENV_DIR, "bin", "python")
+
 run([PIP, "install", "--upgrade", "pip"])
 run([PIP, "install", "-r", "requirements.txt"])
-run([PY, "manage.py", "runserver"])
 
 # 3) run Django
-PY = os.path.join(VENV_DIR, "bin", "python")
 run([PY, "manage.py", "runserver"])
