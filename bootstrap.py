@@ -12,25 +12,27 @@ def run(cmd, **kw):
 
 # 1) create venv if it doesn't exist
 if not os.path.isdir(VENV_DIR):
-    run([PYTHON, "-m", "venv", VENV_DIR])
+    # On Windows, bypass ensurepip errors by skipping pip bootstrap
+    if os.name == "nt":
+        run([PYTHON, "-m", "venv", VENV_DIR, "--without-pip"])
+    else:
+        run([PYTHON, "-m", "venv", VENV_DIR])
 
+# 2) ensure pip is available
 if os.name == "nt":
     pip_path = os.path.join(VENV_DIR, "Scripts", "pip.exe")
     python_path = os.path.join(VENV_DIR, "Scripts", "python.exe")
     # If pip is missing, install it manually
     if not os.path.isfile(pip_path):
+        # Make sure get-pip.py is in the same directory
         run([python_path, "get-pip.py"])
-
-# 2) install/update pip and project requirements
-if os.name == "nt":
-    PIP = os.path.join(VENV_DIR, "Scripts", "pip.exe")
-    PY = os.path.join(VENV_DIR, "Scripts", "python.exe")
 else:
-    PIP = os.path.join(VENV_DIR, "bin", "pip")
-    PY = os.path.join(VENV_DIR, "bin", "python")
+    pip_path = os.path.join(VENV_DIR, "bin", "pip")
+    python_path = os.path.join(VENV_DIR, "bin", "python")
 
-run([PIP, "install", "--upgrade", "pip"])
-run([PIP, "install", "-r", "requirements.txt"])
+# 3) install/update pip and project requirements
+run([pip_path, "install", "--upgrade", "pip"])
+run([pip_path, "install", "-r", "requirements.txt"])
 
-# 3) run Django
-run([PY, "manage.py", "runserver"])
+# 4) run Django
+run([python_path, "manage.py", "runserver"])
